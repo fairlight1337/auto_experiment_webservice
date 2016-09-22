@@ -2,7 +2,12 @@
 
 include("helpers.php");
 
-$do = get("do");
+
+$do = "";
+
+if(isset($_POST["do"])) {
+    $do = $_POST["do"];
+}
 
 if($do != "") {
     header("Content-Type: application/json");
@@ -23,7 +28,86 @@ if($do != "") {
 	<script src="js/jquery/jquery-ui.min.js" type="text/javascript"></script>
 	
 	<script>
-	 $(document).ready(function(){
+	 function checkStatus() {
+	     $(function() {
+		 $.ajax({type: "POST",
+			 url: "",
+			 data: {do: "check_status"},
+			 success: function(data) {
+			     $("#running_experiments").html(formatRunningExperiments(data.running_experiments));
+			 },
+			 error: function(jqXHR, textStatus, errorThrown) {
+			     alert("ERROR! " + textStatus);
+			 }});
+	     });
+	 }
+	 
+	 function listExperiments() {
+	     $(function() {
+		 $.ajax({type: "POST",
+			 url: "",
+			 data: {do: "list_experiments"},
+			 success: function(data) {
+			     $("#available_experiments").html(formatAvailableExperiments(data.available_experiments));
+			 },
+			 error: function(jqXHR, textStatus, errorThrown) {
+			     alert("ERROR! " + textStatus);
+			 }});
+	     });
+	 }
+	 
+	 function killExperiment(expid) {
+	     $.post("",
+		    {do: "kill_experiment",
+		     id: expid},
+		    function(data) {
+			//$("#div1").html("Result: " + data.name);
+		    }, "json");
+	 }
+	 
+	 function runExperiment(exptype) {
+	     $.post("",
+		    {do: "run_experiment",
+		     type: exptype},
+		    function(data) {
+			//$("#div1").html("Result: " + data.name);
+		    }, "json");
+	 }
+	 
+	 function formatAvailableExperiments(data) {
+	     var experiments = "<table>";
+	     experiments += "<tr><td><b>Type</b></td><td><b>Name</b></td><td><b>Run</b></td></tr>";
+	     
+	     $.each(data, function(index, itemData) {
+		 experiments += "<tr>";
+		 experiments += "<td>" + itemData["type"] + "</td>";
+		 experiments += "<td>" + itemData["label"] + "</td>";
+		 experiments += "<td><a style=\"cursor: pointer; text-decoration: underline; color: blue\" onclick='runExperiment(\"" + itemData["type"] + "\")';\">Run</a></td>";
+		 experiments += "</tr>";
+	     });
+	     experiments += "</table>";
+	     
+	     return experiments;
+	 }
+	 
+	 function formatRunningExperiments(data) {
+	     var experiments = "<table>";
+	     experiments += "<tr><td><b>Type</b></td><td><b>Name</b></td><td><b>Runtime</b></td><td><b>Kill</b></td></tr>";
+	     
+	     $.each(data, function(index, itemData) {
+		 experiments += "<tr>";
+		 experiments += "<td>" + itemData["type"] + "</td>";
+		 experiments += "<td>" + itemData["name"] + "</td>";
+		 experiments += "<td>" + itemData["runtime"] + "</td>";
+		 experiments += "<td><a style=\"cursor: pointer; text-decoration: underline; color: blue\" onclick=\"killExperiment(" + itemData["id"] + ");\">Kill</a></td>";
+		 experiments += "</tr>";
+	     });
+	     experiments += "</table>";
+	     
+	     return experiments;
+	 }
+	 
+	 $(document).ready(function() {
 	     $(function() {
 		 $(".widget input[type=submit], .widget a, .widget button").button();
 		 $("button, input, a").click(function(event) {
@@ -31,11 +115,11 @@ if($do != "") {
 		 });
 	     });
 	     
-	     $("#submit_it").click(function(){
-		 $.getJSON("?do=something", function(data) {
-		     $("#div1").html("Result: " + data.name);
-		 });
+	     $("#submit_list").click(function(){
+		 listExperiments();
 	     });
+	     
+	     setInterval(checkStatus, 1000);
 	 });
 	</script>
 	
@@ -46,10 +130,12 @@ if($do != "") {
     
     <body>
 	<form>
-	    <button class="ui-button ui-widget ui-corner-all" id="submit_it">blabla</button>
+	    <button class="ui-button ui-widget ui-corner-all" id="submit_list">List Experiments</button>
 	</form>
 	
 	<div id="div1">Nop.</div>
+	<div id="available_experiments">None yet.</div>
+	<div id="running_experiments">None yet.</div>
     </body>
 </html>
 <?php
@@ -59,7 +145,18 @@ if($do != "") {
     
     $db = new ExpDatabase();
     
-    echo '{ "status" : "success", "name" : "test1" }';
+    switch($do) {
+	case "check_status":
+	    echo '{"running_experiments": [{"type": "ltfnp", "name": "Jan\'s experiment", "runtime": "0", "id": 123}, {"type": "chemlab", "name": "Gheorghe\'s experiment", "runtime": "3", "id": 456}]}';
+	    break;
+	    
+	case "list_experiments":
+	    echo '{"available_experiments": [{"type": "ltfnp", "label": "Longterm Fetch and Place"}, {"type": "chemlab", "label": "Chemical Laboratory"}]}';
+	    break;
+	    
+	default:
+	    echo '{status: unknown}';
+    }
 }
 
 ?>
