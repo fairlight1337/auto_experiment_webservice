@@ -24,88 +24,12 @@ if($do != "") {
 	<meta charset="utf-8">
 	<title>Auto Experimenter</title>
 	
-	<script src="http://code.jquery.com/jquery-1.9.1.min.js"></script>
-	<script src="js/jquery/jquery-ui.min.js" type="text/javascript"></script>
+	<script src="js/jquery/jquery-3.1.0.min.js"></script>
+	<script src="js/jquery/jquery-ui.js" type="text/javascript"></script>
+	<script src="js/AutoExpClient.js" type="text/javascript"></script>
 	
 	<script>
-	 function checkStatus() {
-	     $(function() {
-		 $.ajax({type: "POST",
-			 url: "",
-			 data: {do: "check_status"},
-			 success: function(data) {
-			     $("#running_experiments").html(formatRunningExperiments(data.running_experiments));
-			 },
-			 error: function(jqXHR, textStatus, errorThrown) {
-			     alert("ERROR! " + textStatus);
-			 }});
-	     });
-	 }
-	 
-	 function listExperiments() {
-	     $(function() {
-		 $.ajax({type: "POST",
-			 url: "",
-			 data: {do: "list_experiments"},
-			 success: function(data) {
-			     $("#available_experiments").html(formatAvailableExperiments(data.available_experiments));
-			 },
-			 error: function(jqXHR, textStatus, errorThrown) {
-			     alert("ERROR! " + textStatus);
-			 }});
-	     });
-	 }
-	 
-	 function killExperiment(expid) {
-	     $.post("",
-		    {do: "kill_experiment",
-		     id: expid},
-		    function(data) {
-			//$("#div1").html("Result: " + data.name);
-		    }, "json");
-	 }
-	 
-	 function runExperiment(exptype) {
-	     $.post("",
-		    {do: "run_experiment",
-		     type: exptype},
-		    function(data) {
-			//$("#div1").html("Result: " + data.name);
-		    }, "json");
-	 }
-	 
-	 function formatAvailableExperiments(data) {
-	     var experiments = "<table>";
-	     experiments += "<tr><td><b>Type</b></td><td><b>Name</b></td><td><b>Run</b></td></tr>";
-	     
-	     $.each(data, function(index, itemData) {
-		 experiments += "<tr>";
-		 experiments += "<td>" + itemData["type"] + "</td>";
-		 experiments += "<td>" + itemData["label"] + "</td>";
-		 experiments += "<td><a style=\"cursor: pointer; text-decoration: underline; color: blue\" onclick='runExperiment(\"" + itemData["type"] + "\")';\">Run</a></td>";
-		 experiments += "</tr>";
-	     });
-	     experiments += "</table>";
-	     
-	     return experiments;
-	 }
-	 
-	 function formatRunningExperiments(data) {
-	     var experiments = "<table>";
-	     experiments += "<tr><td><b>Type</b></td><td><b>Name</b></td><td><b>Runtime</b></td><td><b>Kill</b></td></tr>";
-	     
-	     $.each(data, function(index, itemData) {
-		 experiments += "<tr>";
-		 experiments += "<td>" + itemData["type"] + "</td>";
-		 experiments += "<td>" + itemData["name"] + "</td>";
-		 experiments += "<td>" + itemData["runtime"] + "</td>";
-		 experiments += "<td><a style=\"cursor: pointer; text-decoration: underline; color: blue\" onclick=\"killExperiment(" + itemData["id"] + ");\">Kill</a></td>";
-		 experiments += "</tr>";
-	     });
-	     experiments += "</table>";
-	     
-	     return experiments;
-	 }
+	 var aeClient = new AutoExpClient();
 	 
 	 $(document).ready(function() {
 	     $(function() {
@@ -116,14 +40,55 @@ if($do != "") {
 	     });
 	     
 	     $("#submit_list").click(function(){
-		 listExperiments();
+		 aeClient.listExperiments();
 	     });
 	     
-	     setInterval(checkStatus, 1000);
+	     setInterval(aeClient.checkStatus.bind(aeClient), 1000);
+	     
+	     var dialog = $("#queue_experiment_dialog").dialog({
+		 autoOpen: false,
+		 height: 400,
+		 width: 350,
+		 modal: true,
+		 buttons: {
+		     "Create an account": aeClient.addUser,
+		     Cancel: function() {
+			 dialog.dialog("close");
+		     }
+		 },
+		 close: function() {
+		     //form[ 0 ].reset();
+		     //allFields.removeClass( "ui-state-error" );
+		 }
+	     });
+	     
+	     $("#queue_experiment_button").button().on("click", function() {
+		 dialog.dialog("open");
+		 $("#id_experiments_list").selectmenu();
+		 $("#id_experiments_list").html("<option disables>Loading experiments...</option>");
+		 
+		 $(function() {
+		     $.ajax({type: "POST",
+			     url: "",
+			     data: {do: "list_experiments"},
+			     success: function(data) {
+				 var html = "";
+				 
+				 $.each(data.available_experiments, function(index, itemData) {
+				     html += "<option value=\"" + itemData["type"] + "\">" + itemData["label"] + "</option>";
+				 });
+				 
+				 $("#id_experiments_list").html(html);
+			     },
+			     error: function(jqXHR, textStatus, errorThrown) {
+				 alert("ERROR! " + textStatus + errorThrown);
+			     }});
+		 });
+	     });
 	 });
 	</script>
 	
-	<link rel="stylesheet" href="//code.jquery.com/ui/1.12.0/themes/base/jquery-ui.css">
+	<link rel="stylesheet" href="css/jquery-ui.css">
 	<link rel="stylesheet" href="js/jquery/jquery-ui.css">
 	<link rel="stylesheet" href="css/portal.css">
     </head>
@@ -131,32 +96,39 @@ if($do != "") {
     <body>
 	<form>
 	    <button class="ui-button ui-widget ui-corner-all" id="submit_list">List Experiments</button>
+	<button class="ui-button ui-widget ui-corner-all" id="queue_experiment_button">Queue Experiment</button>
 	</form>
 	
-	<div id="div1">Nop.</div>
-	<div id="available_experiments">None yet.</div>
-	<div id="running_experiments">None yet.</div>
+	<div id="available_experiments"></div>
+	<div id="queued_experiments"></div>
+	
+	<div id="queue_experiment_dialog" title="Queue Experiment">
+	    <form action="#">
+		<fieldset>
+		    <label for="experiments_list">Select an Experiment</label>
+		    <select name="experiments_list" id="id_experiments_list">
+			<option disabled>Select Experiment</option>
+		    </select>
+		    
+		    <label for="name">Name</label>
+		    <input type="text" name="name" id="name" value="Jane Smith" class="text ui-widget-content ui-corner-all">
+		    <label for="email">Email</label>
+		    <input type="text" name="email" id="email" value="jane@smith.com" class="text ui-widget-content ui-corner-all">
+		    <label for="password">Password</label>
+		    <input type="password" name="password" id="password" value="xxxxxxx" class="text ui-widget-content ui-corner-all">
+		    
+		    <!-- Allow form submission with keyboard without duplicating the dialog button -->
+		    <input type="submit" tabindex="-1" style="position:absolute; top:-1000px">
+		</fieldset>
+	    </form>
+	</div>
+	
     </body>
 </html>
 <?php
 
 } else {
-    include("expdatabase.php");
-    
-    $db = new ExpDatabase();
-    
-    switch($do) {
-	case "check_status":
-	    echo '{"running_experiments": [{"type": "ltfnp", "name": "Jan\'s experiment", "runtime": "0", "id": 123}, {"type": "chemlab", "name": "Gheorghe\'s experiment", "runtime": "3", "id": 456}]}';
-	    break;
-	    
-	case "list_experiments":
-	    echo '{"available_experiments": [{"type": "ltfnp", "label": "Longterm Fetch and Place"}, {"type": "chemlab", "label": "Chemical Laboratory"}]}';
-	    break;
-	    
-	default:
-	    echo '{status: unknown}';
-    }
+    include("handler.php");
 }
 
 ?>
